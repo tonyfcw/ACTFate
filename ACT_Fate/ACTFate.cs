@@ -20,7 +20,7 @@ using System.Linq;
 [assembly: AssemblyTitle("FFXIV F.A.T.E")]
 [assembly: AssemblyDescription("Duty FATE Assist -- ACT Plugin")]
 [assembly: AssemblyCompany("Bluefissure")]
-[assembly: AssemblyVersion("1.2.2.0")]
+[assembly: AssemblyVersion("1.2.4.0")]
 
 namespace FFXIV_FATE_ACT_Plugin
 {
@@ -57,6 +57,7 @@ namespace FFXIV_FATE_ACT_Plugin
         private System.Windows.Forms.CheckBox checkBoxToastNotification;
         private System.Windows.Forms.Button testToastButton;
         private System.Windows.Forms.CheckBox checkBoxTTS;
+        private System.Windows.Forms.Button resetCheckedButton;
         private static string APP_ID = "Advanced Combat Tracker"; // 아무거나 쓰면 됨 유니크하게
         public ACTFate()
         {
@@ -282,6 +283,7 @@ namespace FFXIV_FATE_ACT_Plugin
             this.label2 = new System.Windows.Forms.Label();
             this.checkBoxUploader = new System.Windows.Forms.CheckBox();
             this.groupBox2 = new System.Windows.Forms.GroupBox();
+            this.resetCheckedButton = new System.Windows.Forms.Button();
             this.label4 = new System.Windows.Forms.Label();
             this.FateTreeView = new System.Windows.Forms.TreeView();
             this.checkBoxDutyFinder = new System.Windows.Forms.CheckBox();
@@ -309,6 +311,7 @@ namespace FFXIV_FATE_ACT_Plugin
             this.comboBoxLanguage.Name = "comboBoxLanguage";
             this.comboBoxLanguage.Size = new System.Drawing.Size(121, 20);
             this.comboBoxLanguage.TabIndex = 6;
+            this.comboBoxLanguage.SelectedIndexChanged += new System.EventHandler(this.comboBoxLanguage_SelectedIndexChanged_1);
             // 
             // groupBox1
             // 
@@ -351,6 +354,7 @@ namespace FFXIV_FATE_ACT_Plugin
             // 
             // groupBox2
             // 
+            this.groupBox2.Controls.Add(this.resetCheckedButton);
             this.groupBox2.Controls.Add(this.label4);
             this.groupBox2.Controls.Add(this.FateTreeView);
             this.groupBox2.Controls.Add(this.checkBoxDutyFinder);
@@ -360,6 +364,16 @@ namespace FFXIV_FATE_ACT_Plugin
             this.groupBox2.TabIndex = 10;
             this.groupBox2.TabStop = false;
             this.groupBox2.Text = "Alert";
+            // 
+            // resetCheckedButton
+            // 
+            this.resetCheckedButton.Location = new System.Drawing.Point(97, 52);
+            this.resetCheckedButton.Name = "resetCheckedButton";
+            this.resetCheckedButton.Size = new System.Drawing.Size(75, 23);
+            this.resetCheckedButton.TabIndex = 11;
+            this.resetCheckedButton.Text = "Reset";
+            this.resetCheckedButton.UseVisualStyleBackColor = true;
+            this.resetCheckedButton.Click += new System.EventHandler(this.resetCheckedButton_Click);
             // 
             // label4
             // 
@@ -475,7 +489,7 @@ namespace FFXIV_FATE_ACT_Plugin
             string areaCode = null;
             try
             {
-                areaCode = data["fates"][code.ToString()]["area_code"].ToString();
+                areaCode = data["fates"][code.ToString()]["area_code"][selLng].ToString();
                 return data["areas"][areaCode][selLng].ToString();
             }
             catch (Exception e)
@@ -630,12 +644,14 @@ namespace FFXIV_FATE_ACT_Plugin
                 try
                 {
                     string key = item.Name;
+                    if (data["areas"][key][selLng].ToString() == "null")
+                        continue;
                     System.Windows.Forms.TreeNode areaNode = this.FateTreeView.Nodes.Add(data["areas"][key][selLng].ToString());
                     areaNode.Tag = "AREA:" + key;
                     if (c.Contains((string)areaNode.Tag)) areaNode.Checked = true;
                     foreach (JProperty fate in data["fates"])
                     {
-                        if (data["fates"][fate.Name]["area_code"].ToString().Equals(key) == false) continue;
+                        if (data["fates"][fate.Name]["area_code"][selLng].ToString().Equals(key) == false) continue;
                         string text = data["fates"][fate.Name]["name"][selLng].ToString();
                         if (text == null || text == "") text = data["fates"][fate.Name]["name"]["en"].ToString();
                         System.Windows.Forms.TreeNode fateNode = areaNode.Nodes.Add(text);
@@ -859,13 +875,32 @@ namespace FFXIV_FATE_ACT_Plugin
         private void testToastButton_Click(object sender, EventArgs e)
         {
             toastWindowNotification("Test Toast Notification");
-            postToURL("Test URL Post");
             TTS("Test TTS");
+            postToURL("Test URL Post");
         }
 
         private void checkBoxTTS_CheckedChanged(object sender, EventArgs e)
         {
             isTTSEnable = checkBoxTTS.Checked;
+        }
+
+        private void resetCheckedButton_Click(object sender, EventArgs e)
+        {
+            foreach (System.Windows.Forms.TreeNode area in this.FateTreeView.Nodes)
+            {
+                foreach (System.Windows.Forms.TreeNode fate in area.Nodes)
+                {
+                    if (fate.Checked)
+                        fate.Checked = false;
+                }
+            }
+            SelectedFates.Clear();
+        }
+
+        private void comboBoxLanguage_SelectedIndexChanged_1(object sender, EventArgs e)
+        {
+            selLng = (string)comboBoxLanguage.SelectedValue;
+            loadFates();
         }
     }
 
