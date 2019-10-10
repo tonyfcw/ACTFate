@@ -29,8 +29,8 @@ if __name__=="__main__":
         'ja':26,
         'fr':26,
         'de':26,
-        'ko':28,
-        'zh':28
+        'ko':26,
+        'zh':26
     }
     with codecs.open(config.get("csv"), "r", "utf8") as f:
         spamreader = csv.reader(f)
