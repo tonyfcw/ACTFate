@@ -353,6 +353,7 @@ namespace App
                 else if (opcode == 0x0079)
                 {
                     var code = BitConverter.ToUInt16(data, 0);
+                    byte order = 0;
                     byte status = 0;
                     byte tank = 0;
                     byte dps = 0;
