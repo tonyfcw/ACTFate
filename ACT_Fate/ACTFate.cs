@@ -7,8 +7,6 @@ using Advanced_Combat_Tracker;
 using System.Diagnostics;
 using System.Collections.Generic;
 using System.Collections.Concurrent;
-using Windows.Data;
-using Windows.UI;
 using System.IO;
 using Newtonsoft.Json.Linq;
 using System.Xml;
@@ -17,11 +15,16 @@ using System.Net;
 using System.Collections.Specialized;
 using System.Linq;
 using System.Windows.Forms;
+using System.Threading.Tasks;
 
 [assembly: AssemblyTitle("FFXIV F.A.T.E")]
+#if COMPATIBLE
+[assembly: AssemblyDescription("Duty FATE Assist -- ACT Plugin (Compatible)")]
+#else
 [assembly: AssemblyDescription("Duty FATE Assist -- ACT Plugin")]
+#endif
 [assembly: AssemblyCompany("Bluefissure")]
-[assembly: AssemblyVersion("1.2.5.0")]
+[assembly: AssemblyVersion("1.3.0.0")]
 
 namespace FFXIV_FATE_ACT_Plugin
 {
@@ -69,12 +72,16 @@ namespace FFXIV_FATE_ACT_Plugin
         public void InitPlugin(System.Windows.Forms.TabPage pluginScreenSpace, System.Windows.Forms.Label pluginStatusText)
         {
 
-            ShortCutCreator.TryCreateShortcut(APP_ID, APP_ID);
+            // ShortCutCreator.TryCreateShortcut(APP_ID, APP_ID); // deprecated
             active = true;
             this.lblStatus = pluginStatusText;
             this.lblStatus.Text = "FFXIV F.A.T.E Plugin Started.";
-            pluginScreenSpace.Text = "FATE Parser";
 
+#if COMPATIBLE
+            pluginScreenSpace.Text = "FATE Parser (Compatible)";
+#else
+            pluginScreenSpace.Text = "FATE Parser";
+#endif
             pluginScreenSpace.Controls.Add(this);
             xmlSettings = new SettingsSerializer(this);
 
@@ -95,13 +102,10 @@ namespace FFXIV_FATE_ACT_Plugin
             timer.Enabled = true;
 
             updateFFXIVProcesses();
-
-
             loadJSONData();
-
             LoadSettings();
             this.comboBoxLanguage.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList;
-            selLng = (string)this.comboBoxLanguage.SelectedValue;
+            selLng = this.comboBoxLanguage.SelectedValue.ToString();
             loadFates();
             loadBookmarks();
         }
@@ -110,18 +114,17 @@ namespace FFXIV_FATE_ACT_Plugin
         {
             xmlSettings.AddControlSetting(comboBoxLanguage.Name, comboBoxLanguage);
             xmlSettings.AddControlSetting(checkBoxToastNotification.Name, checkBoxToastNotification);
-
             xmlSettings.AddControlSetting(checkBoxTTS.Name, checkBoxTTS);
             xmlSettings.AddControlSetting(checkBoxUploader.Name, checkBoxUploader);
             xmlSettings.AddControlSetting(postURL.Name, postURL);
             xmlSettings.AddControlSetting(checkBoxDutyFinder.Name, checkBoxDutyFinder);
+            xmlSettings.AddBooleanSetting("cheatRoulette");
             xmlSettings.AddStringSetting("chkFates");
 
             if (File.Exists(settingsFile))
             {
                 FileStream fs = new FileStream(settingsFile, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
                 XmlTextReader xReader = new XmlTextReader(fs);
-
                 try
                 {
                     while (xReader.Read())
@@ -143,9 +146,7 @@ namespace FFXIV_FATE_ACT_Plugin
             }
             isUploaderEnable = checkBoxUploader.Checked;
             postURL.Enabled = !isUploaderEnable;
-
             isTTSEnable = checkBoxTTS.Checked;
-
             isDutyAlertEnable = checkBoxDutyFinder.Checked;
             isToastNotificationEnable = checkBoxToastNotification.Checked;
         }
@@ -197,10 +198,10 @@ namespace FFXIV_FATE_ACT_Plugin
         private void Timer_Tick(object sender, EventArgs e)
         {
             if (active == false) return;
-    
+
             updateFFXIVProcesses();
         }
-        
+
         private void updateFFXIVProcesses()
         {
             var processes = new List<Process>();
@@ -217,13 +218,14 @@ namespace FFXIV_FATE_ACT_Plugin
                     pn.network.onReceiveEvent += Network_onReceiveEvent;
                     networks.TryAdd(process.Id, pn);
                 }
-                catch (Exception e) {
+                catch (Exception e)
+                {
                     Log.Ex(e, "error");
                 }
             }
 
             List<int> toDelete = new List<int>();
-            foreach(KeyValuePair<int, ProcessNet> entry in networks)
+            foreach (KeyValuePair<int, ProcessNet> entry in networks)
             {
                 if (entry.Value.process.HasExited)
                 {
@@ -250,11 +252,12 @@ namespace FFXIV_FATE_ACT_Plugin
                     networks.TryRemove(toDelete[i], out pn);
                     pn.network.onReceiveEvent -= Network_onReceiveEvent;
                 }
-                catch (Exception e) {
+                catch (Exception e)
+                {
                     Log.Ex(e, "error");
                 }
             }
-            
+
 
         }
 
@@ -267,12 +270,12 @@ namespace FFXIV_FATE_ACT_Plugin
                 this.lblStatus.Text = "FFXIV F.A.T.E Plugin Unloaded.";
                 this.lblStatus = null;
             }
-            
+
             foreach (KeyValuePair<int, ProcessNet> entry in networks)
             {
                 entry.Value.network.StopCapture();
             }
-            
+
             timer.Enabled = false;
             SaveSettings();
         }
@@ -479,7 +482,8 @@ namespace FFXIV_FATE_ACT_Plugin
             try
             {
                 return data["instances"][code.ToString()]["name"][selLng].ToString();
-            } catch(Exception e)
+            }
+            catch (Exception e)
             {
                 Log.Ex(e, "ignore");
             }
@@ -504,7 +508,7 @@ namespace FFXIV_FATE_ACT_Plugin
             string areaCode = null;
             try
             {
-                areaCode = data["fates"][code.ToString()]["area_code"][selLng].ToString();
+                areaCode = data["fates"][code.ToString()]["area_code"].ToString();
                 return data["areas"][areaCode][selLng].ToString();
             }
             catch (Exception e)
@@ -526,14 +530,34 @@ namespace FFXIV_FATE_ACT_Plugin
             }
             return code.ToString();
         }
+        private string getFinderTextNotification(int roulette, int code)
+        {
+            try
+            {
+                if (roulette != 0)
+                {
+                    if (cheatRoulette)
+                        return getTextRoulette(roulette) + " >> " + getTextInstance(code);
+                    else
+                        return getTextRoulette(roulette);
+                }
+                else
+                    return getTextInstance(code);
+            }
+            catch (Exception e)
+            {
+                Log.Ex(e, "ignore");
+            }
+            return roulette.ToString() + " >> " + code.ToString();
+        }
 
 
         private void Network_onReceiveEvent(int pid, App.Network.EventType eventType, int[] args)
         {
             string server = (networks[pid].process.MainModule.FileName.Contains("KOREA") ? "KOREA" : "GLOBAL");
-            string text = "[ACTFATE]"+ ((char)007) + pid + ((char)007) + server + ((char)007) + eventType + ((char)007);
+            string text = "[ACTFATE]" + ((char)007) + pid + ((char)007) + server + ((char)007) + eventType + ((char)007);
 
-            
+
             int pos = 0;
             switch (eventType)
             {
@@ -547,7 +571,7 @@ namespace FFXIV_FATE_ACT_Plugin
                 case App.Network.EventType.FATE_BEGIN:
                 case App.Network.EventType.FATE_PROGRESS:
                 case App.Network.EventType.FATE_END:
-                    text += getTextFate(args[0]) + ((char)007) + getTextFateArea(args[0]) + ((char)007);pos++;
+                    text += getTextFate(args[0]) + ((char)007) + getTextFateArea(args[0]) + ((char)007); pos++;
                     break;
                 case App.Network.EventType.MATCH_BEGIN:
                     text += (App.Network.MatchType)args[0] + ((char)007); pos++;
@@ -574,20 +598,16 @@ namespace FFXIV_FATE_ACT_Plugin
                     break;
                 case App.Network.EventType.MATCH_ALERT:
                     text += getTextRoulette(args[0]) + ((char)007); pos++;
-
                     text += (args[1].ToString() + ((char)007).ToString());
                     text += getTextInstance(args[1]) + ((char)007); pos++;
                     break;
-
             }
-
             for (int i = pos; i < args.Length; i++)
             {
                 text += args[i] + ((char)007);
             }
 
-            sendToACT(text);
-
+            //sendToACT(text);
             postToToastWindowsNotificationIfNeeded(server, eventType, args);
             postToURLIfNeeded(server, eventType, args);
             postToTTSIfNeeded(server, eventType, args);
@@ -603,12 +623,21 @@ namespace FFXIV_FATE_ACT_Plugin
         {
             public string Name { get; set; }
             public string Code { get; set; }
+
+            public override string ToString()
+            {
+                return Name;
+            }
         }
 
         private class Bookmark
         {
             public string Name { get; set; }
             public string Code { get; set; }
+            public override string ToString()
+            {
+                return Name;
+            }
         }
 
         private JObject data;
@@ -616,6 +645,7 @@ namespace FFXIV_FATE_ACT_Plugin
 
         private bool isUploaderEnable = false;
         private string chkFates;
+        private bool cheatRoulette;
         private ConcurrentStack<string> SelectedFates = new ConcurrentStack<string>();
 
         private void loadJSONData()
@@ -635,10 +665,10 @@ namespace FFXIV_FATE_ACT_Plugin
             this.comboBoxLanguage.DataSource = languages.ToArray();
             comboBoxLanguage.DisplayMember = "Name";
             comboBoxLanguage.ValueMember = "Code";
-            selLng = (string)comboBoxLanguage.SelectedValue;
+            selLng = comboBoxLanguage.SelectedValue.ToString();
 
-            data = json;  
-            
+            data = json;
+
         }
 
         private void loadBookmarks()
@@ -657,10 +687,10 @@ namespace FFXIV_FATE_ACT_Plugin
 
         private void comboBoxLanguage_SelectedIndexChanged(object sender, EventArgs e)
         {
-            selLng = (string)comboBoxLanguage.SelectedValue;
+            selLng = comboBoxLanguage.SelectedValue.ToString();
             loadFates();
         }
-        
+
         private void loadFates()
         {
             this.FateTreeView.Nodes.Clear();
@@ -675,6 +705,9 @@ namespace FFXIV_FATE_ACT_Plugin
                 }
             }
 
+            if(data == null)
+                loadJSONData();
+
             lockTreeEvent = true;
             foreach (JProperty item in data["areas"])
             {
@@ -688,14 +721,15 @@ namespace FFXIV_FATE_ACT_Plugin
                     if (c.Contains((string)areaNode.Tag)) areaNode.Checked = true;
                     foreach (JProperty fate in data["fates"])
                     {
-                        if (data["fates"][fate.Name]["area_code"][selLng].ToString().Equals(key) == false) continue;
+                        if (data["fates"][fate.Name]["area_code"].ToString().Equals(key) == false) continue;
                         string text = data["fates"][fate.Name]["name"][selLng].ToString();
                         if (text == null || text == "") text = data["fates"][fate.Name]["name"]["en"].ToString();
                         System.Windows.Forms.TreeNode fateNode = areaNode.Nodes.Add(text);
                         fateNode.Tag = fate.Name;
                         if (c.Contains((string)fateNode.Tag)) fateNode.Checked = true;
                     }
-                }catch (Exception e)
+                }
+                catch (Exception e)
                 {
                     Log.Ex(e, "error");
                 }
@@ -722,7 +756,7 @@ namespace FFXIV_FATE_ACT_Plugin
                 {
                     node.Checked = e.Node.Checked;
                 }
-            } 
+            }
             else
             {
                 if (e.Node.Checked == false)
@@ -761,26 +795,27 @@ namespace FFXIV_FATE_ACT_Plugin
             if (isUploaderEnable == false) return;
 
             string head = networks.Count <= 1 ? "" : "[" + server + "] ";
+
             switch (eventType)
             {
-                case App.Network.EventType.MATCH_ALERT: 
+                case App.Network.EventType.MATCH_ALERT:
                     //text += getTextRoulette(args[0]) + "|"; pos++;
                     //text += getTextInstance(args[1]) + "|"; pos++;
                     if (isDutyAlertEnable)
                     {
-                        postToURL(head + getTextRoulette(args[0]) + " >> " + getTextInstance(args[1]));
+                        postToURL(head + getFinderTextNotification(args[0], args[1]));
                     }
                     break;
                 case App.Network.EventType.FATE_BEGIN:
                     //text += getTextFate(args[0]) + "|" + getTextFateArea(args[0]) + "|"; pos++;
-                    if (SelectedFates.Contains(args[0].ToString())) {
+                    if (SelectedFates.Contains(args[0].ToString()))
+                    {
                         postToURL(head + getTextFateArea(args[0]) + " >> " + getTextFate(args[0]));
                     }
                     break;
 
             }
         }
-
         private void postToToastWindowsNotificationIfNeeded(string server, App.Network.EventType eventType, int[] args)
         {
             if (eventType != App.Network.EventType.FATE_BEGIN && eventType != App.Network.EventType.MATCH_ALERT) return;
@@ -794,7 +829,7 @@ namespace FFXIV_FATE_ACT_Plugin
                     //text += getTextInstance(args[1]) + "|"; pos++;
                     if (isDutyAlertEnable)
                     {
-                       toastWindowNotification(head + getTextRoulette(args[0]) + " >> " + getTextInstance(args[1]));
+                        toastWindowNotification(head + getFinderTextNotification(args[0], args[1]));
                     }
                     break;
                 case App.Network.EventType.FATE_BEGIN:
@@ -821,7 +856,7 @@ namespace FFXIV_FATE_ACT_Plugin
                     //text += getTextInstance(args[1]) + "|"; pos++;
                     if (isDutyAlertEnable)
                     {
-                        TTS(head + getTextRoulette(args[0]) + " " + getTextInstance(args[1]));
+                        TTS(head + getFinderTextNotification(args[0], args[1]));
                     }
                     break;
                 case App.Network.EventType.FATE_BEGIN:
@@ -838,15 +873,22 @@ namespace FFXIV_FATE_ACT_Plugin
         private void postToURL(string message)
         {
             string url = postURL.Text;
-            if (url == null || url == "" ) return;
-
-            using (WebClient client = new WebClient())
+            if (url == null || url == "") return;
+            try
             {
-                client.UploadValuesAsync(new Uri(url), "POST", new NameValueCollection()
+                using (WebClient client = new WebClient())
+                {
+                    client.UploadValuesAsync(new Uri(url), "POST", new NameValueCollection()
                 {
                     { "text", message }
                 });
+                }
             }
+            catch (Exception e)
+            {
+                Log.Ex(e, "ignore");
+            }
+
         }
 
         private void checkBox_CheckedChanged(object sender, EventArgs e)
@@ -866,14 +908,16 @@ namespace FFXIV_FATE_ACT_Plugin
         }
         private void toastWindowNotification(string text)
         {
-            Version currentVersion = Environment.OSVersion.Version;
-            Version compareToVersion = new Version("6.2");
-            if (currentVersion.CompareTo(compareToVersion) >= 0)
+#if COMPATIBLE
+            Task.Run(() =>
+            {
+                MessageBox.Show(text, "ACTFate", MessageBoxButtons.OK, MessageBoxIcon.Exclamation, MessageBoxDefaultButton.Button1, MessageBoxOptions.ServiceNotification);
+            });
+#else
             {
                 try
                 {
                     // Get a toast XML template
-
                     Windows.Data.Xml.Dom.XmlDocument toastXml = Windows.UI.Notifications.ToastNotificationManager.GetTemplateContent(Windows.UI.Notifications.ToastTemplateType.ToastImageAndText03);
 
                     // Fill in the text elements
@@ -883,16 +927,6 @@ namespace FFXIV_FATE_ACT_Plugin
                         stringElements[i].AppendChild(toastXml.CreateTextNode(text));
                     }
 
-                    // Specify the absolute path to an image
-                    String imagePath = "file:///" + Path.GetFullPath("toastImageAndText.png"); // If it does not exist, it will take the default icon image. It seems to have to be put in ACT
-                    Windows.Data.Xml.Dom.XmlNodeList imageElements = toastXml.GetElementsByTagName("image");
-                    imageElements[0].Attributes.GetNamedItem("src").NodeValue = imagePath;
-
-                    /*
-                    Windows.Data.Xml.Dom.XmlElement audioElement = toastXml.CreateElement("audio");
-                    audioElement.SetAttribute("src", "ms-winsoundevent:Notification.SMS");
-                    audioElement.SetAttribute("loop", "true");
-                    */
                     // Create the toast and attach event listeners
                     Windows.UI.Notifications.ToastNotification toast = new Windows.UI.Notifications.ToastNotification(toastXml);
 
@@ -904,12 +938,9 @@ namespace FFXIV_FATE_ACT_Plugin
                     Log.Ex(e, "error");
                 }
             }
-            else
-            {
-                MessageBox.Show(text, "ACTFate", MessageBoxButtons.OK, MessageBoxIcon.None, MessageBoxDefaultButton.Button1, MessageBoxOptions.ServiceNotification);
-            }
-            
-            
+#endif
+
+
         }
 
         private void checkBoxToastNotification_CheckedChanged(object sender, EventArgs e)
@@ -946,19 +977,23 @@ namespace FFXIV_FATE_ACT_Plugin
 
         private void comboBoxLanguage_SelectedIndexChanged_1(object sender, EventArgs e)
         {
-            selLng = (string)comboBoxLanguage.SelectedValue;
+            selLng = comboBoxLanguage.SelectedValue.ToString();
             loadFates();
             loadBookmarks();
         }
 
         private void comboBoxBookmark_SelectedIndexChanged(object sender, EventArgs e)
         {
-            string SelectedBookmark = (string)comboBoxBookmark.SelectedValue;
+            string SelectedBookmark = comboBoxBookmark.SelectedValue.ToString();
+            if(SelectedBookmark == "Bookmark")
+            {
+                return;
+            }
             foreach (System.Windows.Forms.TreeNode area in this.FateTreeView.Nodes)
             {
                 foreach (System.Windows.Forms.TreeNode fate in area.Nodes)
                 {
-                    foreach(var f in data["bookmarks"][SelectedBookmark]["fates"])
+                    foreach (var f in data["bookmarks"][SelectedBookmark]["fates"])
                     {
                         if (f.ToString().Equals(fate.Tag))
                         {
